@@ -1,0 +1,18 @@
+test,question,generated_sql,status,rows_returned,errors
+Basic count,How many orders are there in total?,SELECT COUNT(*) FROM sample_data,PASSED,1,None
+Simple filter,Show me all completed orders,SELECT * FROM sample_data WHERE status = 'completed',PASSED,16,None
+Aggregation with GROUP BY,What is the total revenue by customer segment?,"SELECT customer_segment, ROUND(SUM(total_amount), 2) AS total_revenue FROM sample_data GROUP BY customer_segment",PASSED,3,None
+TOP N query,Show me the top 3 customers by total spending,"SELECT customer_name, ROUND(SUM(total_amount), 2) AS total_spending FROM sample_data GROUP BY customer_name ORDER BY total_spending DESC LIMIT 3",PASSED,3,None
+Filter by city,Show me all orders from New York,SELECT * FROM sample_data WHERE city = 'New_York',FAILED,0,Query returned no results
+Average calculation,What is the average order value?,"SELECT ROUND(AVG(total_amount), 2) as avg_order_value FROM sample_data",PASSED,1,None
+Count by category,How many orders are there per product category?,"SELECT category, COUNT(*) AS order_count FROM sample_data GROUP BY category ORDER BY order_count DESC",PASSED,2,None
+Filter by status and sum,What is the total revenue from completed orders only?,"SELECT ROUND(SUM(total_amount), 2) AS total_revenue 
+FROM sample_data 
+WHERE status = 'completed'",PASSED,1,None
+Multiple columns with sort,Show me all orders sorted by total amount highest first,SELECT * FROM sample_data ORDER BY total_amount DESC,PASSED,20,None
+Count distinct values,How many unique cities are there?,SELECT COUNT(DISTINCT city) FROM sample_data,PASSED,1,None
+Max value,What is the highest order amount?,SELECT MAX(total_amount) FROM sample_data,PASSED,1,None
+Group by with having,Which customers have placed more than 1 order?,SELECT customer_name FROM sample_data GROUP BY customer_name HAVING COUNT(order_id) > 1,PASSED,10,None
+Revenue by city,What is the total revenue per city?,"SELECT ROUND(SUM(total_amount), 2) as total_revenue_per_city, city FROM sample_data GROUP BY city",PASSED,4,None
+Filter by payment method,Show me all orders paid by Credit Card,SELECT * FROM sample_data WHERE payment_method = 'Credit Card',PASSED,7,None
+Sales rep performance,Which sales rep has the highest total sales?,"SELECT sales_rep, ROUND(SUM(total_amount), 2) as total_sales FROM sample_data GROUP BY sales_rep ORDER BY total_sales DESC LIMIT 1",PASSED,1,None

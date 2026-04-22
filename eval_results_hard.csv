@@ -1,0 +1,22 @@
+category,test,question,generated_sql,status,rows_returned,errors
+Basic,Total count,How many orders are there in total?,SELECT COUNT(*) FROM data,PASSED,1,None
+Basic,Simple filter by status,Show me all completed orders,SELECT * FROM data WHERE status = 'completed',PASSED,17,None
+Basic,Simple filter by city,Show me all orders from New York,SELECT * FROM data WHERE city = 'New York',PASSED,6,None
+Basic,Sort and limit,Show me the top 3 orders by total amount,SELECT * FROM data ORDER BY total_amount DESC LIMIT 3,PASSED,3,None
+Aggregation,Sum by group,What is the total revenue by customer segment?,"SELECT customer_segment, ROUND(SUM(total_amount), 2) as total_revenue FROM data GROUP BY customer_segment",PASSED,3,None
+Aggregation,Average calculation,What is the average order value?,"SELECT ROUND(AVG(total_amount), 2) AS avg_order_value FROM data",PASSED,1,None
+Aggregation,Count by group,How many orders are there per product category?,"SELECT category, COUNT(*) FROM data GROUP BY category",PASSED,2,None
+Aggregation,Max value,What is the highest order amount?,SELECT MAX(total_amount) FROM data,PASSED,1,None
+Multiple Conditions,AND condition,Show me completed orders from New York,SELECT * FROM data WHERE status = 'completed' AND city = 'New York',PASSED,6,None
+Multiple Conditions,OR condition,Show me orders from Chicago or Houston,"SELECT * FROM data WHERE city IN ('Chicago', 'Houston')",PASSED,12,None
+Multiple Conditions,NOT condition,Show me orders that are not completed,SELECT * FROM data WHERE status != 'completed',PASSED,3,None
+Multiple Conditions,AND with segment and status,Show me pending orders from Enterprise customers,SELECT * FROM data WHERE status = 'pending' AND customer_segment = 'Enterprise',FAILED,0,"Expected value 'Enterprise' not found in results, Query returned no results"
+Date Filtering,Filter by month,Show me all orders from January 2024,"SELECT * FROM data WHERE strftime('%Y-%m', order_date) = '2024-01'",PASSED,3,None
+Date Filtering,Filter by quarter,Show me all orders from the first quarter of 2024,"SELECT * FROM data WHERE strftime('%Y-%m', order_date) BETWEEN '2024-01' AND '2024-03'",PASSED,16,None
+Date Filtering,Date calculation between two columns,Show me orders where delivery took more than 5 days,"SELECT * FROM data WHERE strftime('%J', order_date) + 5 < strftime('%J', delivery_date)",PASSED,20,None
+Percentages,Percentage by city,What percentage of orders are from each city?,"SELECT city, ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM data), 2) as percentage FROM data GROUP BY city ORDER BY percentage DESC",PASSED,4,None
+Percentages,Percentage by status,What percentage of orders are completed?,"SELECT ROUND(100.0 * COUNT(CASE WHEN status = 'completed' THEN 1 ELSE NULL END) / (SELECT COUNT(*) FROM data), 2) as completed_percentage FROM data",PASSED,1,None
+Advanced,Subquery — above average,Show me customers who spent more than the average order amount,SELECT customer_name FROM data WHERE total_amount > ( SELECT AVG(total_amount) FROM data ),PASSED,8,None
+Advanced,HAVING clause,Which customers have placed more than 1 order?,SELECT customer_name FROM data GROUP BY customer_name HAVING COUNT(order_id) > 1,PASSED,10,None
+Advanced,Sales rep performance,Which sales rep has the highest total sales?,"SELECT sales_rep, SUM(total_amount) AS total_sales FROM data GROUP BY sales_rep ORDER BY total_sales DESC LIMIT 1",PASSED,1,None
+Advanced,Revenue and count together,Show me total revenue and number of orders per sales rep,"SELECT sales_rep, SUM(total_amount) as total_revenue, COUNT(order_id) as num_orders FROM data GROUP BY sales_rep ORDER BY total_revenue DESC",PASSED,5,None
