@@ -1,0 +1,29 @@
+[
+  {
+    "role": "user",
+    "content": "What is the total revenue by customer segment?",
+    "timestamp": "22 Apr 2026 05:19 PM"
+  },
+  {
+    "role": "assistant",
+    "content": "The breakdown of total revenue by customer segment shows that Enterprise customers generate $6209.87, SMB (Small to Medium Business) customers bring in $5489.86, and Startup customers contribute $2919.93. Overall, these segments collectively account for a significant portion of revenue.",
+    "table": [
+      {
+        "customer_segment": "Enterprise",
+        "total_revenue": 6209.87
+      },
+      {
+        "customer_segment": "SMB",
+        "total_revenue": 5489.86
+      },
+      {
+        "customer_segment": "Startup",
+        "total_revenue": 2919.93
+      }
+    ],
+    "default_chart_type": "Bar",
+    "sql": "SELECT customer_segment, ROUND(SUM(total_amount), 2) as total_revenue FROM sample_data GROUP BY customer_segment",
+    "explanation": "`customer_segment` \u2014 selects this column to show in the result\n\n`ROUND(SUM(total_amount)` \u2014 adds up all the values in that column\n\n`2) as total_revenue` \u2014 selects this column to show in the result\n\n`FROM sample_data` \u2014 gets the data from the **sample_data** table\n\n`GROUP BY customer_segment` \u2014 groups rows together so we can calculate totals per **customer_segment**",
+    "timestamp": "22 Apr 2026 05:19 PM"
+  }
+]

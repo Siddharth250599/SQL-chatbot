@@ -5,7 +5,9 @@ import sqlite3
 import ollama
 import os
 import re
+import json
 import plotly.express as px
+from datetime import datetime
 
 # ─── PAGE SETUP ──────────────────────────────────────────────────────────────
 
@@ -17,6 +19,48 @@ st.set_page_config(
 
 st.title("SQL Chatbot")
 st.caption("Upload an Excel or CSV file and ask questions in plain English!")
+
+# ─── CHAT HISTORY FILE ───────────────────────────────────────────────────────
+
+HISTORY_FILE = "chat_history.json"
+
+def load_history():
+    """Load chat history from file"""
+    if os.path.exists(HISTORY_FILE):
+        try:
+            with open(HISTORY_FILE, "r") as f:
+                return json.load(f)
+        except:
+            return []
+    return []
+
+def save_history(history):
+    """Save chat history to file"""
+    try:
+        # Convert DataFrames to JSON-serializable format
+        serializable = []
+        for msg in history:
+            msg_copy = msg.copy()
+            if "table" in msg_copy and msg_copy["table"] is not None:
+                msg_copy["table"] = msg_copy["table"].to_dict(orient="records")
+            serializable.append(msg_copy)
+        with open(HISTORY_FILE, "w") as f:
+            json.dump(serializable, f, indent=2, default=str)
+    except Exception as e:
+        st.warning(f"Could not save history: {e}")
+
+def restore_history(history):
+    """Restore DataFrames from saved history"""
+    restored = []
+    for msg in history:
+        msg_copy = msg.copy()
+        if "table" in msg_copy and msg_copy["table"] is not None:
+            try:
+                msg_copy["table"] = pd.DataFrame(msg_copy["table"])
+            except:
+                msg_copy["table"] = None
+        restored.append(msg_copy)
+    return restored
 
 # ─── LOAD SHEETS INTO DATABASE ───────────────────────────────────────────────
 
@@ -145,7 +189,6 @@ def build_explanation(sql):
 # ─── AUTO CHART ──────────────────────────────────────────────────────────────
 
 def auto_chart(df, question):
-    """Decide the default chart type based on the data"""
     if df is None or len(df) < 2 or len(df.columns) > 6:
         return None
 
@@ -172,7 +215,6 @@ def auto_chart(df, question):
 # ─── BUILD CHART ─────────────────────────────────────────────────────────────
 
 def build_chart(df, chart_type):
-    """Build a Plotly chart based on selected type"""
     if df is None or chart_type == "No chart" or chart_type is None:
         return None
 
@@ -199,10 +241,7 @@ def build_chart(df, chart_type):
                 hover_data=cols
             )
             fig.update_traces(texttemplate='%{text:.2f}', textposition='outside')
-            fig.update_layout(
-                coloraxis_showscale=False,
-                xaxis_tickangle=-30
-            )
+            fig.update_layout(coloraxis_showscale=False, xaxis_tickangle=-30)
             return fig
 
         elif chart_type == "Horizontal Bar":
@@ -305,7 +344,6 @@ Q: What percentage of orders are from each city?
 A: SELECT city, ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM {table_names[0]}), 2) as percentage FROM {table_names[0]} GROUP BY city ORDER BY percentage DESC
 """
 
-    # Step 1: question → SQL
     response = ollama.chat(
         model="llama3.1",
         messages=[
@@ -315,11 +353,9 @@ A: SELECT city, ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM {table_names[0]})
     )
     sql = clean_sql(response["message"]["content"])
 
-    # Step 2: safety check
     if not is_safe(sql):
         return "That query was blocked for safety reasons.", None, None, None
 
-    # Step 3: run query with up to 3 retries
     last_error = None
     for attempt in range(3):
         try:
@@ -333,7 +369,6 @@ A: SELECT city, ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM {table_names[0]})
 
             result_df = pd.DataFrame(rows, columns=columns)
 
-            # Step 4: friendly answer
             data_str = result_df.head(10).to_string(index=False)
             friendly = ollama.chat(
                 model="llama3.1",
@@ -343,7 +378,6 @@ A: SELECT city, ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM {table_names[0]})
                 }]
             )
 
-            # Step 5: explain the SQL
             explanation = build_explanation(sql)
 
             return (
@@ -371,29 +405,30 @@ A: SELECT city, ROUND(100.0 * COUNT(*) / (SELECT COUNT(*) FROM {table_names[0]})
 # ─── DISPLAY ANSWER ──────────────────────────────────────────────────────────
 
 def display_answer(msg, idx):
-    """Display answer with chart switcher"""
     st.markdown(msg["content"])
 
     if msg.get("table") is not None:
-        st.dataframe(msg["table"], use_container_width=True)
+        table = msg["table"]
+        if isinstance(table, list):
+            table = pd.DataFrame(table)
+        st.dataframe(table, use_container_width=True)
 
-    if msg.get("table") is not None and len(msg["table"]) >= 2:
-        chart_types = ["Bar", "Horizontal Bar", "Line", "Pie", "Scatter", "No chart"]
+        if len(table) >= 2:
+            chart_types = ["Bar", "Horizontal Bar", "Line", "Pie", "Scatter", "No chart"]
+            default = msg.get("default_chart_type", "No chart")
+            default_idx = chart_types.index(default) if default in chart_types else len(chart_types) - 1
 
-        default = msg.get("default_chart_type", "No chart")
-        default_idx = chart_types.index(default) if default in chart_types else len(chart_types) - 1
+            selected = st.selectbox(
+                "Change chart type",
+                options=chart_types,
+                index=default_idx,
+                key=f"chart_select_{idx}"
+            )
 
-        selected = st.selectbox(
-            "Change chart type",
-            options=chart_types,
-            index=default_idx,
-            key=f"chart_select_{idx}"
-        )
-
-        if selected != "No chart":
-            chart = build_chart(msg["table"], selected)
-            if chart:
-                st.plotly_chart(chart, use_container_width=True)
+            if selected != "No chart":
+                chart = build_chart(table, selected)
+                if chart:
+                    st.plotly_chart(chart, use_container_width=True)
 
     if msg.get("sql") is not None:
         with st.expander("See generated SQL"):
@@ -403,15 +438,50 @@ def display_answer(msg, idx):
         with st.expander("What does this SQL do?"):
             st.markdown(msg["explanation"])
 
+    if msg.get("timestamp"):
+        st.caption(f"Asked at {msg['timestamp']}")
+
 # ─── MAIN APP ────────────────────────────────────────────────────────────────
 
+# ── Load persistent history on startup ──
+if "messages" not in st.session_state:
+    saved = load_history()
+    st.session_state.messages = restore_history(saved) if saved else []
+
+# ── Sidebar with history controls ──
+with st.sidebar:
+    st.header("Chat History")
+
+    if st.session_state.messages:
+        # Count only user messages
+        user_msgs = [m for m in st.session_state.messages if m["role"] == "user"]
+        st.caption(f"{len(user_msgs)} questions asked")
+
+        # Show list of previous questions
+        st.subheader("Previous questions")
+        for i, msg in enumerate(st.session_state.messages):
+            if msg["role"] == "user":
+                timestamp = msg.get("timestamp", "")
+                st.markdown(f"**{timestamp}**\n{msg['content'][:60]}{'...' if len(msg['content']) > 60 else ''}")
+
+        st.divider()
+
+        # Clear history button
+        if st.button("Clear all history", type="secondary", use_container_width=True):
+            st.session_state.messages = []
+            if os.path.exists(HISTORY_FILE):
+                os.remove(HISTORY_FILE)
+            st.rerun()
+    else:
+        st.caption("No history yet. Start asking questions!")
+
+# ── Main content ──
 st.subheader("Load data")
 
 col1, col2 = st.columns([1, 3])
 with col1:
     if st.button("Try sample data", use_container_width=True, type="primary"):
         st.session_state.use_sample = True
-        st.session_state.messages = []
         st.session_state.active_sheets = "sample"
 with col2:
     st.caption("No file? Load our sample sales dataset instantly and start asking questions!")
@@ -484,12 +554,6 @@ if use_sample or uploaded_file:
             if st.button(suggestion, use_container_width=True):
                 st.session_state.prefill = suggestion
 
-    # ── Reset chat when data source changes ──
-    source_key = "sample" if use_sample else "_".join(table_names)
-    if "active_sheets" not in st.session_state or st.session_state.active_sheets != source_key:
-        st.session_state.messages = []
-        st.session_state.active_sheets = source_key
-
     # ── Display chat history ──
     for idx, msg in enumerate(st.session_state.messages):
         with st.chat_message(msg["role"]):
@@ -497,6 +561,8 @@ if use_sample or uploaded_file:
                 display_answer(msg, idx)
             else:
                 st.markdown(msg["content"])
+                if msg.get("timestamp"):
+                    st.caption(msg["timestamp"])
 
     # ── Chat input ──
     prefill = st.session_state.pop("prefill", "") if "prefill" in st.session_state else ""
@@ -504,9 +570,17 @@ if use_sample or uploaded_file:
 
     if question or prefill:
         q = question or prefill
+        timestamp = datetime.now().strftime("%d %b %Y %I:%M %p")
+
         with st.chat_message("user"):
             st.write(q)
-        st.session_state.messages.append({"role": "user", "content": q})
+            st.caption(timestamp)
+
+        st.session_state.messages.append({
+            "role": "user",
+            "content": q,
+            "timestamp": timestamp
+        })
 
         with st.chat_message("assistant"):
             with st.spinner("Thinking..."):
@@ -519,9 +593,11 @@ if use_sample or uploaded_file:
                 "table": result_df,
                 "default_chart_type": default_chart_type,
                 "sql": sql,
-                "explanation": explanation
+                "explanation": explanation,
+                "timestamp": timestamp
             }
             st.session_state.messages.append(msg)
+            save_history(st.session_state.messages)
             display_answer(msg, len(st.session_state.messages) - 1)
 
 else:
@@ -533,7 +609,6 @@ else:
     - Combine two sheets and ask questions across both
     - See interactive charts automatically
     - Switch chart types with one click
-    - Hover over charts to see all details
-    - See the exact SQL generated for every question
-    - Understand what each part of the SQL means
+    - Chat history saved automatically
+    - Clear history anytime from the sidebar
     """)
